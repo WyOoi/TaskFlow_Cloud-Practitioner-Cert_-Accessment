@@ -1,6 +1,18 @@
 <?php
 // Include database configuration
-require_once __DIR__ . '/../config.php';
+// Try to load the local config file first, then fall back to the parent directory
+if (file_exists(__DIR__ . '/config.php')) {
+    require_once __DIR__ . '/config.php';
+} elseif (file_exists(__DIR__ . '/../config.php')) {
+    require_once __DIR__ . '/../config.php';
+} else {
+    // Fallback to environment variables if no config file is found
+    $user = getenv('DB_USER') ?: 'wy';
+    $password = getenv('DB_PASSWORD') ?: 'password';
+    $database = getenv('DB_NAME') ?: 'mydb1';
+    $table = getenv('DB_TABLE') ?: 'todo_list';
+    $host = getenv('DB_HOST') ?: 'localhost';
+}
 
 // PHP initialization
 $pageTitle = "TaskFlow Pro";
@@ -10,14 +22,14 @@ $author = "Weiyuan";
 // Database setup - automatically create database and tables if they don't exist
 try {
     // Create connection to MySQL (without database selected)
-    $conn = new PDO("mysql:host=localhost", $user, $password);
+    $conn = new PDO("mysql:host=$host", $user, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Create database if it doesn't exist
     $conn->exec("CREATE DATABASE IF NOT EXISTS $database");
     
     // Connect to the specific database
-    $conn = new PDO("mysql:host=localhost;dbname=$database", $user, $password);
+    $conn = new PDO("mysql:host=$host;dbname=$database", $user, $password);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Create table if it doesn't exist
@@ -51,13 +63,15 @@ try {
     }
 } catch(PDOException $e) {
     $setup_error = "Database setup error: " . $e->getMessage();
+    $setup_error .= "<br>If you're deploying on Vercel, make sure your environment variables are set correctly and your database allows remote connections.";
+    $setup_error .= "<br>Host: " . $host . ", Database: " . $database . ", User: " . $user;
 }
 
 // Handle form submission for adding new tasks
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST["action"]) && $_POST["action"] == "add" && !empty($_POST["new_task"])) {
         try {
-            $db = new PDO("mysql:host=localhost;dbname=$database", $user, $password);
+            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
             $stmt = $db->prepare("INSERT INTO $table (content, completed, priority) VALUES (?, 0, ?)");
             $stmt->execute([$_POST["new_task"], $_POST["priority"]]);
             // Redirect to prevent form resubmission
@@ -68,7 +82,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     } elseif (isset($_POST["action"]) && $_POST["action"] == "toggle" && isset($_POST["task_id"])) {
         try {
-            $db = new PDO("mysql:host=localhost;dbname=$database", $user, $password);
+            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
             // First get current status
             $stmt = $db->prepare("SELECT completed FROM $table WHERE item_id = ?");
             $stmt->execute([$_POST["task_id"]]);
@@ -96,7 +110,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     } elseif (isset($_POST["action"]) && $_POST["action"] == "delete" && isset($_POST["task_id"])) {
         try {
-            $db = new PDO("mysql:host=localhost;dbname=$database", $user, $password);
+            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
             $stmt = $db->prepare("DELETE FROM $table WHERE item_id = ?");
             $stmt->execute([$_POST["task_id"]]);
             
@@ -112,7 +126,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 // Try to load tasks from database
 $tasks = []; // Initialize empty array
 try {
-    $db = new PDO("mysql:host=localhost;dbname=$database", $user, $password);
+    $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
     // Ensure we're using the correct column names as defined in the CREATE TABLE statement
     $stmt = $db->query("SELECT item_id as id, content, completed, priority, created_at FROM $table ORDER BY 
                         CASE 
@@ -133,6 +147,8 @@ try {
     }
 } catch (PDOException $e) {
     $connection_error = "Database connection failed: " . $e->getMessage();
+    $connection_error .= "<br>If you're deploying on Vercel, make sure your environment variables are set correctly and your database allows remote connections.";
+    $connection_error .= "<br>Host: " . $host . ", Database: " . $database . ", User: " . $user;
     // Will use empty tasks array
 }
 
