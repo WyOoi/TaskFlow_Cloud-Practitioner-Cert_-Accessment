@@ -1,169 +1,66 @@
 <?php
-// Include database configuration
-// Try to load the local config file first, then fall back to the parent directory
-if (file_exists(__DIR__ . '/config.php')) {
-    require_once __DIR__ . '/config.php';
-} elseif (file_exists(__DIR__ . '/../config.php')) {
-    require_once __DIR__ . '/../config.php';
-} else {
-    // Fallback to environment variables if no config file is found
-    $user = getenv('DB_USER') ?: 'wy';
-    $password = getenv('DB_PASSWORD') ?: 'password';
-    $database = getenv('DB_NAME') ?: 'mydb1';
-    $table = getenv('DB_TABLE') ?: 'todo_list';
-    $host = getenv('DB_HOST') ?: 'localhost';
-}
-
 // PHP initialization
 $pageTitle = "TaskFlow Pro";
 $currentDate = date("F j, Y");
 $author = "Weiyuan";
 
-// Database setup - automatically create database and tables if they don't exist
-try {
-    // Check if we have valid connection parameters
-    if ($host === 'MISSING_DB_HOST_ENV_VARIABLE') {
-        throw new PDOException("DB_HOST environment variable is not set. When deploying on Vercel, you must set DB_HOST to your MySQL server's IP address.");
-    }
-    
-    // Set connection options with timeout
-    $options = [
-        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        PDO::ATTR_TIMEOUT => 5, // 5 seconds timeout
-        PDO::ATTR_PERSISTENT => false
-    ];
-    
-    // Create connection to MySQL (without database selected)
-    $conn = new PDO("mysql:host=$host", $user, $password, $options);
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Create database if it doesn't exist
-    $conn->exec("CREATE DATABASE IF NOT EXISTS $database");
-    
-    // Connect to the specific database
-    $conn = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    
-    // Create table if it doesn't exist
-    $sql = "CREATE TABLE IF NOT EXISTS $table (
-        item_id INT(11) AUTO_INCREMENT PRIMARY KEY,
-        content VARCHAR(255) NOT NULL,
-        completed TINYINT(1) DEFAULT 0,
-        priority VARCHAR(10) DEFAULT 'medium',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )";
-    $conn->exec($sql);
-    
-    // Check if table is empty and add sample data if needed
-    $stmt = $conn->query("SELECT COUNT(*) FROM $table");
-    $count = $stmt->fetchColumn();
-    
-    if ($count == 0) {
-        // Insert sample data
-        $sample_tasks = [
-            ["Complete project proposal", 1, "high"],
-            ["Schedule team meeting", 0, "high"],
-            ["Research market trends", 0, "medium"],
-            ["Update client documentation", 1, "medium"],
-            ["Review quarterly goals", 0, "low"]
-        ];
-        
-        $stmt = $conn->prepare("INSERT INTO $table (content, completed, priority) VALUES (?, ?, ?)");
-        foreach ($sample_tasks as $task) {
-            $stmt->execute($task);
-        }
-    }
-} catch(PDOException $e) {
-    $setup_error = "Database setup error: " . $e->getMessage();
-    $setup_error .= "<br>If you're deploying on Vercel, make sure your environment variables are set correctly and your database allows remote connections.";
-    $setup_error .= "<br>Host: " . $host . ", Database: " . $database . ", User: " . $user;
-$setup_error .= "<br><strong>Important:</strong> If you're deploying on Vercel, you must set the DB_HOST environment variable to your MySQL server's IP address, not 'localhost'.";
-}
+// Dummy data - static tasks instead of database
+$tasks = [
+    [
+        "id" => 1,
+        "task" => "Complete project proposal",
+        "completed" => true,
+        "priority" => "high",
+        "created_at" => date("Y-m-d H:i:s", strtotime("-3 days"))
+    ],
+    [
+        "id" => 2,
+        "task" => "Schedule team meeting",
+        "completed" => false,
+        "priority" => "high",
+        "created_at" => date("Y-m-d H:i:s", strtotime("-2 days"))
+    ],
+    [
+        "id" => 3,
+        "task" => "Research market trends",
+        "completed" => false,
+        "priority" => "medium",
+        "created_at" => date("Y-m-d H:i:s", strtotime("-1 day"))
+    ],
+    [
+        "id" => 4,
+        "task" => "Update client documentation",
+        "completed" => true,
+        "priority" => "medium",
+        "created_at" => date("Y-m-d H:i:s", strtotime("-5 days"))
+    ],
+    [
+        "id" => 5,
+        "task" => "Review quarterly goals",
+        "completed" => false,
+        "priority" => "low",
+        "created_at" => date("Y-m-d H:i:s", strtotime("-4 days"))
+    ]
+];
 
 // Handle form submission for adding new tasks
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST["action"]) && $_POST["action"] == "add" && !empty($_POST["new_task"])) {
-        try {
-            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
-            $stmt = $db->prepare("INSERT INTO $table (content, completed, priority) VALUES (?, 0, ?)");
-            $stmt->execute([$_POST["new_task"], $_POST["priority"]]);
-            // Redirect to prevent form resubmission
-            header("Location: " . $_SERVER["PHP_SELF"]);
-            exit();
-        } catch (PDOException $e) {
-            $error = "Error adding task: " . $e->getMessage();
-        }
+        // In a real app, this would add to the database
+        // For this demo, we'll just redirect back
+        header("Location: " . $_SERVER["PHP_SELF"]);
+        exit();
     } elseif (isset($_POST["action"]) && $_POST["action"] == "toggle" && isset($_POST["task_id"])) {
-        try {
-            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
-            // First get current status
-            $stmt = $db->prepare("SELECT completed FROM $table WHERE item_id = ?");
-            $stmt->execute([$_POST["task_id"]]);
-            $current = $stmt->fetchColumn();
-            
-            // Toggle status
-            $stmt = $db->prepare("UPDATE $table SET completed = ? WHERE item_id = ?");
-            $stmt->execute([!$current, $_POST["task_id"]]);
-            
-            // Return success for AJAX
-            if (isset($_POST["ajax"])) {
-                echo json_encode(["success" => true, "new_status" => !$current]);
-                exit;
-            }
-            
-            // Redirect for non-AJAX
-            header("Location: " . $_SERVER["PHP_SELF"]);
-            exit();
-        } catch (PDOException $e) {
-            $error = "Error updating task: " . $e->getMessage();
-            if (isset($_POST["ajax"])) {
-                echo json_encode(["success" => false, "error" => $error]);
-                exit;
-            }
-        }
+        // In a real app, this would update the database
+        // For this demo, we'll just redirect back
+        header("Location: " . $_SERVER["PHP_SELF"]);
+        exit();
     } elseif (isset($_POST["action"]) && $_POST["action"] == "delete" && isset($_POST["task_id"])) {
-        try {
-            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
-            $stmt = $db->prepare("DELETE FROM $table WHERE item_id = ?");
-            $stmt->execute([$_POST["task_id"]]);
-            
-            // Redirect
-            header("Location: " . $_SERVER["PHP_SELF"]);
-            exit();
-        } catch (PDOException $e) {
-            $error = "Error deleting task: " . $e->getMessage();
-        }
+        // In a real app, this would delete from the database
+        // For this demo, we'll just redirect back
+        header("Location: " . $_SERVER["PHP_SELF"]);
+        exit();
     }
-}
-
-// Try to load tasks from database
-$tasks = []; // Initialize empty array
-try {
-    $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
-    // Ensure we're using the correct column names as defined in the CREATE TABLE statement
-    $stmt = $db->query("SELECT item_id as id, content, completed, priority, created_at FROM $table ORDER BY 
-                        CASE 
-                            WHEN priority = 'high' THEN 1 
-                            WHEN priority = 'medium' THEN 2 
-                            WHEN priority = 'low' THEN 3 
-                        END, 
-                        completed ASC, 
-                        created_at DESC");
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $tasks[] = [
-            "id" => $row['id'],
-            "task" => $row['content'],
-            "completed" => (bool)$row['completed'],
-            "priority" => $row['priority'],
-            "created_at" => $row['created_at']
-        ];
-    }
-} catch (PDOException $e) {
-    $connection_error = "Database connection failed: " . $e->getMessage();
-    $connection_error .= "<br>If you're deploying on Vercel, make sure your environment variables are set correctly and your database allows remote connections.";
-    $connection_error .= "<br>Host: " . $host . ", Database: " . $database . ", User: " . $user;
-$connection_error .= "<br><strong>Important:</strong> If you're deploying on Vercel, you must set the DB_HOST environment variable to your MySQL server's IP address, not 'localhost'.";
-    // Will use empty tasks array
 }
 
 // Count statistics
@@ -637,16 +534,6 @@ $completion_percentage = $total_tasks > 0 ? round(($completed_tasks / $total_tas
                 <span><?php echo $author; ?></span>
             </div>
         </div>
-        
-        <?php if (isset($error) || isset($connection_error) || isset($setup_error)): ?>
-            <div class="error">
-                <?php 
-                    if (isset($error)) echo $error;
-                    if (isset($connection_error)) echo $connection_error;
-                    if (isset($setup_error)) echo $setup_error;
-                ?>
-            </div>
-        <?php endif; ?>
         
         <div class="stats-container">
             <div class="stat-card">
