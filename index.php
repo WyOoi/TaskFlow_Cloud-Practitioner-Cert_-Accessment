@@ -1,6 +1,9 @@
 <?php
-// Include database configuration
-require_once 'config.php';
+// Database configuration
+$user = "wy";
+$password = "password";
+$database = "mydb1";
+$table = "todo_list";
 
 // PHP initialization
 $pageTitle = "TaskFlow Pro";
