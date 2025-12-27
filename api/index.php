@@ -21,15 +21,27 @@ $author = "Weiyuan";
 
 // Database setup - automatically create database and tables if they don't exist
 try {
+    // Check if we have valid connection parameters
+    if ($host === 'MISSING_DB_HOST_ENV_VARIABLE') {
+        throw new PDOException("DB_HOST environment variable is not set. When deploying on Vercel, you must set DB_HOST to your MySQL server's IP address.");
+    }
+    
+    // Set connection options with timeout
+    $options = [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_TIMEOUT => 5, // 5 seconds timeout
+        PDO::ATTR_PERSISTENT => false
+    ];
+    
     // Create connection to MySQL (without database selected)
-    $conn = new PDO("mysql:host=$host", $user, $password);
+    $conn = new PDO("mysql:host=$host", $user, $password, $options);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Create database if it doesn't exist
     $conn->exec("CREATE DATABASE IF NOT EXISTS $database");
     
     // Connect to the specific database
-    $conn = new PDO("mysql:host=$host;dbname=$database", $user, $password);
+    $conn = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
     $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Create table if it doesn't exist
@@ -65,13 +77,14 @@ try {
     $setup_error = "Database setup error: " . $e->getMessage();
     $setup_error .= "<br>If you're deploying on Vercel, make sure your environment variables are set correctly and your database allows remote connections.";
     $setup_error .= "<br>Host: " . $host . ", Database: " . $database . ", User: " . $user;
+$setup_error .= "<br><strong>Important:</strong> If you're deploying on Vercel, you must set the DB_HOST environment variable to your MySQL server's IP address, not 'localhost'.";
 }
 
 // Handle form submission for adding new tasks
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     if (isset($_POST["action"]) && $_POST["action"] == "add" && !empty($_POST["new_task"])) {
         try {
-            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
+            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
             $stmt = $db->prepare("INSERT INTO $table (content, completed, priority) VALUES (?, 0, ?)");
             $stmt->execute([$_POST["new_task"], $_POST["priority"]]);
             // Redirect to prevent form resubmission
@@ -82,7 +95,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     } elseif (isset($_POST["action"]) && $_POST["action"] == "toggle" && isset($_POST["task_id"])) {
         try {
-            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
+            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
             // First get current status
             $stmt = $db->prepare("SELECT completed FROM $table WHERE item_id = ?");
             $stmt->execute([$_POST["task_id"]]);
@@ -110,7 +123,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
     } elseif (isset($_POST["action"]) && $_POST["action"] == "delete" && isset($_POST["task_id"])) {
         try {
-            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password);
+            $db = new PDO("mysql:host=$host;dbname=$database", $user, $password, $options);
             $stmt = $db->prepare("DELETE FROM $table WHERE item_id = ?");
             $stmt->execute([$_POST["task_id"]]);
             
@@ -149,6 +162,7 @@ try {
     $connection_error = "Database connection failed: " . $e->getMessage();
     $connection_error .= "<br>If you're deploying on Vercel, make sure your environment variables are set correctly and your database allows remote connections.";
     $connection_error .= "<br>Host: " . $host . ", Database: " . $database . ", User: " . $user;
+$connection_error .= "<br><strong>Important:</strong> If you're deploying on Vercel, you must set the DB_HOST environment variable to your MySQL server's IP address, not 'localhost'.";
     // Will use empty tasks array
 }
 
